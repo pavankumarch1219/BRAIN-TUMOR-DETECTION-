@@ -1,0 +1,65 @@
+trigger: none
+
+resources:
+  pipelines:
+    - pipeline: ciPipeline
+      source: "Braintumor-Detection-by team sahyadri"
+      trigger: true
+
+pool:
+  name: agent-sahyadri
+
+variables:
+- group: keyvault-credentials
+
+- name: dockerRepo
+  value: $(DOCKERUSERNAME)/brain-tumor-app
+
+- name: containerName
+  value: brain-container
+
+- name: imageTag
+  value: $(resources.pipeline.ciPipeline.runID)
+
+stages:
+- stage: Prod
+  jobs:
+  - deployment: DeployToProd
+    environment: prod
+
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - checkout: none
+
+          - script: |
+              echo $(DOCKERHUBPASSWORD) | docker login -u $(DOCKERUSERNAME) --password-stdin
+            displayName: Docker Login
+
+          - script: |
+              docker pull $(dockerRepo):$(imageTag)
+            displayName: Pull Image
+
+          - script: |
+              docker stop $(containerName)-prod || true
+              docker rm $(containerName)-prod || true
+            displayName: Cleanup
+
+          - script: |
+              docker run -d -p 5000:5000 \
+              --name $(containerName)-prod \
+              $(dockerRepo):$(imageTag)
+            displayName: Run Container
+
+          - script: docker ps
+            displayName: Verify
+
+          - script: |
+              sleep 10
+              curl http://localhost:5000 || true
+            displayName: Health Check
+
+          - script: docker logout
+            displayName: Docker Logout
