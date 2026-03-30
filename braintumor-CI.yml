@@ -1,0 +1,55 @@
+trigger: 
+- main
+
+pool:
+  name: agent-sahyadri
+
+variables:
+- group: keyvault-credentials
+
+- name: imageName
+  value: brain-tumor-app
+
+- name: dockerRepo
+  value: $(DOCKERUSERNAME)/brain-tumor-app
+
+steps:
+
+- checkout: self
+
+- task: SonarQubePrepare@7
+  inputs:
+    SonarQube: 'sonar-local'
+    scannerMode: 'CLI'
+    configMode: 'manual'
+    cliProjectKey: 'brain-tumor-app'
+    cliProjectName: 'brain-tumor-app'
+    cliSources: '.'
+
+- task: SonarQubeAnalyze@7
+
+- task: SonarQubePublish@7
+  inputs:
+    pollingTimeoutSec: '300'
+
+- script: |
+    echo $(DOCKERHUBPASSWORD) | docker login -u $(DOCKERUSERNAME) --password-stdin
+  displayName: Docker Login
+
+- script: |
+    docker build -t $(dockerRepo):$(Build.BuildId) .
+    docker tag $(dockerRepo):$(Build.BuildId) $(dockerRepo):latest
+  displayName: Build Image
+
+- script: |
+    docker push $(dockerRepo):$(Build.BuildId)
+    docker push $(dockerRepo):latest
+  displayName: Push Image
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Pipeline.Workspace)'
+    artifact: 'drop'
+
+- script: docker logout
+  displayName: Docker Logout
